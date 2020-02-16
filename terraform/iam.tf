@@ -31,19 +31,19 @@ resource "aws_iam_role_policy_attachment" "s3_attachment" {
 }
 
 resource "aws_iam_policy" "rds_policy" {
-  name        = "GhostWebServerRDSPolicy"
+  name        = "MoodleWebServerRDSPolicy"
   description = "Allow describe RDS instance and list tags"
   policy      = data.aws_iam_policy_document.rds_policy_document.json
 }
 
 resource "aws_iam_policy" "ssm_policy" {
-  name        = "GhostWebServerSSMPolicy"
+  name        = "MoodleWebServerSSMPolicy"
   description = "Allow get parameters and use KMS keys"
   policy      = data.aws_iam_policy_document.ssm_policy_document.json
 }
 
 resource "aws_iam_policy" "s3_policy" {
-  name        = "GhostWebServerS3Policy"
+  name        = "MoodleWebServerS3Policy"
   description = "Policy for s3 sync task"
   policy      = data.aws_iam_policy_document.s3_policy_document.json
 }
@@ -68,6 +68,7 @@ data "aws_iam_policy_document" "ssm_policy_document" {
       "ssm:GetParameter",
       "ssm:GetParametersByPath",
       "ssm:DescribeParameters",
+      "ssm:PutParameter",
       "kms:decrypt",
       "kms:DescribeKey",
       "kms:encrypt",

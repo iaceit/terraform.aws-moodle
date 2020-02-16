@@ -29,6 +29,10 @@ function get_parameter() {
     echo "$parameter"
 }
 
+function update_parameter() {
+    aws ssm put-parameter --name $1 --value $2 --type SecureString --overwrite
+}
+
 function install_docker() {
     log "Installing docker and its dependencies."
     apt-get update
@@ -49,7 +53,8 @@ function install_docker() {
 
 function install_aws_cli() {
     apt-get update
-    apt-get -y install awscli
+    apt-get -y install awscli python3-pip
+    pip3 install awscli --upgrade
 }
 
 function get_db_host() {
@@ -83,7 +88,7 @@ TimeoutStartSec=0
 Restart=always
 ExecStartPre=-/usr/bin/docker stop %n
 ExecStartPre=-/usr/bin/docker rm %n
-ExecStartPre=/usr/bin/docker pull iaceit/moodle:3.8.0
+ExecStartPre=/usr/bin/docker pull bitnami/moodle:3.8.1
 ExecStart=/usr/bin/docker run \\
                                 -e "MARIADB_HOST=$DB_HOST" \\
                                 -e "MARIADB_PORT_NUMBER=3306" \\
@@ -95,19 +100,22 @@ ExecStart=/usr/bin/docker run \\
                                 -e "MOODLE_SKIP_INSTALL=$MOODLE_SKIP_INSTALL" \\
                                 -v /usr/moodle/moodledata:/bitnami/moodle/moodledata \\
                                 --name %n \\
-                                -p 8080:80 \\
-                                iaceit/moodle:3.8.0
+                                --expose 80 \\
+                                --expose 443 \\
+                                --network "host" \\
+                                bitnami/moodle:3.8.1
 ExecStop=/usr/bin/docker stop %n
 [Install]
 WantedBy=multi-user.target
 END
 }
 
-function install_nginx-moodle() {
-    log "Installing nginx-moodle service."
-    cat > /etc/systemd/system/nginx-moodle.service <<END
+function install_jobe() {
+  log "Installing JOBE"
+
+  cat > /etc/systemd/system/jobe.service <<END
 [Unit]
-Description=Nginx that serves Moodle
+Description=JOBE -- Job Engine
 After=docker.service
 Requires=docker.service
 [Service]
@@ -115,11 +123,11 @@ TimeoutStartSec=0
 Restart=always
 ExecStartPre=-/usr/bin/docker stop %n
 ExecStartPre=-/usr/bin/docker rm %n
-ExecStartPre=/usr/bin/docker build -t nginx https://github.com/iaceit/terraform.aws-moodle.git#:nginx
+ExecStartPre=/usr/bin/docker pull trampgeek/jobeinabox:latest
 ExecStart=/usr/bin/docker run \\
                                 --name %n \\
-                                --network=host \\
-                                nginx
+                                -p 8081:80 \\
+                                trampgeek/jobeinabox:latest
 ExecStop=/usr/bin/docker stop %n
 [Install]
 WantedBy=multi-user.target
@@ -141,7 +149,6 @@ TimeoutStartSec=0
 Restart=always
 ExecStartPre=-/usr/bin/docker stop %n
 ExecStartPre=-/usr/bin/docker rm %n
-ExecStartPre=/usr/bin/docker build -t ddns-cloudflare https://github.com/haoming-yin/script.ddns-cloudflare.git
 ExecStartPre=/usr/bin/docker pull haomingyin/script.ddns-cloudflare:latest
 ExecStart=/usr/bin/docker run \\
                                 -e "DDNS_PROFILE=iaceit" \\
@@ -163,12 +170,12 @@ function install_s3-sync() {
     log "Installing s3-sync service."
     cat > /etc/systemd/system/s3-sync.service <<END
 [Unit]
-Description=S3 sync for Ghost CMS content
+Description=S3 sync for moodle data
 After=moodle.service
 Requires=moodle.service
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/aws s3 sync /usr/moodle/moodledata s3://iaceit.com/moodle/moodledata --delete --no-follow-symlinks --include "filedir/*" --include "lang/*" --exclude "*"
+ExecStart=/usr/bin/aws s3 sync /usr/moodle/moodledata s3://iaceit.com/moodle/moodledata --delete --no-follow-symlinks --exclude "*" --include "filedir/*" --include "lang/*"
 [Install]
 WantedBy=multi-user.target
 END
@@ -197,12 +204,13 @@ install_docker
 
 install_s3-sync
 install_moodle
+update_parameter '/moodle/skip-install' 'yes'
+
+install_jobe
+service jobe start
 
 service moodle start
 systemctl enable s3-sync.timer --now
-
-install_nginx-moodle
-service nginx-moodle start
 
 install_ddns-cloudflare
 service ddns-cloudflare start
