@@ -74,6 +74,7 @@ function install_moodle() {
     mkdir -p /usr/moodle/moodledata
     DB_HOST=$(get_db_host)
     DB_PASSWORD=$(get_parameter "/db/password")
+    MOODLE_IMAGE=bitnami/moodle:3.8.2
     MOODLE_USERNAME=$(get_parameter "/moodle/username")
     MOODLE_PASSWORD=$(get_parameter "/moodle/password")
     MOODLE_SKIP_INSTALL=$(get_parameter "/moodle/skip-install")
@@ -84,11 +85,12 @@ Description=Moodle Quiz Server
 After=docker.service
 Requires=docker.service
 [Service]
+User=root
 TimeoutStartSec=0
-Restart=always
+Restart=no
 ExecStartPre=-/usr/bin/docker stop %n
 ExecStartPre=-/usr/bin/docker rm %n
-ExecStartPre=/usr/bin/docker pull bitnami/moodle:3.8.1
+ExecStartPre=/usr/bin/docker pull $MOODLE_IMAGE
 ExecStart=/usr/bin/docker run \\
                                 -e "MARIADB_HOST=$DB_HOST" \\
                                 -e "MARIADB_PORT_NUMBER=3306" \\
@@ -103,7 +105,7 @@ ExecStart=/usr/bin/docker run \\
                                 --expose 80 \\
                                 --expose 443 \\
                                 --network "host" \\
-                                bitnami/moodle:3.8.1
+                                $MOODLE_IMAGE
 ExecStop=/usr/bin/docker stop %n
 [Install]
 WantedBy=multi-user.target
@@ -175,7 +177,7 @@ After=moodle.service
 Requires=moodle.service
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/aws s3 sync /usr/moodle/moodledata s3://iaceit.com/moodle/moodledata --delete --no-follow-symlinks --exclude "*" --include "filedir/*" --include "lang/*"
+ExecStart=/usr/bin/aws s3 sync /usr/moodle/moodledata s3://987882637451/moodle/moodledata --delete --no-follow-symlinks --exclude "*" --include "filedir/*" --include "lang/*"
 [Install]
 WantedBy=multi-user.target
 END
@@ -212,7 +214,7 @@ service jobe start
 service moodle start
 systemctl enable s3-sync.timer --now
 
-install_ddns-cloudflare
-service ddns-cloudflare start
+#install_ddns-cloudflare
+#service ddns-cloudflare start
 
 log "Finished running user data script."
